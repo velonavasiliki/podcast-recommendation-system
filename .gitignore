@@ -6,6 +6,10 @@ config.py
 data/
 **/data/
 
+# Files related to Colab
+colab-files/
+**/colab-files/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -37,6 +41,7 @@ venv/
 env/
 ENV/
 .venv
+.env
 
 # IDE
 .vscode/
