@@ -1,29 +1,27 @@
 """
-Hybrid Neural Collaborative Filtering Model
-
 This module defines the HybridNCF architecture that combines:
 - Collaborative Filtering: User-item interaction patterns from ratings
 - Content-Based Filtering: Pre-trained BERT embeddings from review text
-- Transfer Learning: Semantic understanding from aggregated review embeddings
 """
 
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, Model
 from tensorflow.keras.regularizers import l2
+from tensorflow.keras.utils import register_keras_serializable
 import numpy as np
 
-
+@register_keras_serializable(package="MyModels") 
 class HybridNCF(Model):
-    """Hybrid Neural Collaborative Filtering with Transfer Learning
+    """Hybrid Neural Collaborative Filtering
 
     Combines collaborative filtering (user-item interactions) with content-based
     filtering (BERT embeddings from review text) for improved recommendation accuracy.
 
     Architecture:
-    - User CF embeddings (learned from ratings)
-    - Item CF embeddings (learned from ratings)
-    - Item content embeddings (pre-trained BERT from reviews)
+    - User_id CF embeddings (learned from ratings)
+    - Item_id CF embeddings (learned from ratings)
+    - Item text content embeddings (using pre-trained BERT)
     - CF interaction term (element-wise multiplication)
     - Deep fusion network with batch normalization
 
@@ -48,6 +46,8 @@ class HybridNCF(Model):
         self.mlp_layers = mlp_layers
         self.dropout_rate = dropout_rate
         self.freeze_pretrained = freeze_pretrained
+        self.l2_reg = l2_reg
+
         self.user_bias = layers.Embedding(n_users, 1)
         self.item_bias = layers.Embedding(n_items, 1)
 
@@ -85,6 +85,7 @@ class HybridNCF(Model):
             )
         else:
             self.has_pretrained = False
+            self.pretrained_dim = None
 
         # Fusion network: combines CF and content signals
         self.fusion_layers = []
@@ -129,13 +130,10 @@ class HybridNCF(Model):
 
         # Combine CF and content signals
         if self.has_pretrained:
-            # Get content embeddings and project to CF dimension
             item_content = self.item_content_embedding(item_input)
             item_content_proj = self.content_projection(item_content)
-            # Concatenate: [user_cf, item_cf, content, interaction]
             combined = tf.concat([user_cf, item_cf, item_content_proj, cf_interaction], axis=1)
         else:
-            # No content embeddings available
             combined = tf.concat([user_cf, item_cf, cf_interaction], axis=1)
 
         # Pass through fusion network
@@ -154,14 +152,35 @@ class HybridNCF(Model):
 
     def get_config(self):
         """Get model configuration for serialization"""
-        return {
+        config = {
             'n_users': self.n_users,
             'n_items': self.n_items,
             'embedding_dim': self.embedding_dim,
             'mlp_layers': self.mlp_layers,
             'dropout_rate': self.dropout_rate,
-            'freeze_pretrained': self.freeze_pretrained
+            'freeze_pretrained': self.freeze_pretrained,
+            'l2_reg': self.l2_reg
         }
+        
+        # Remembers whether Bert embeddings present
+        if self.has_pretrained:
+            config['pretrained_dim'] = self.pretrained_dim
+        
+        return config
+    
+    @classmethod  
+    def from_config(cls, config):
+        """Create model from config during loading"""
+        
+        pretrained_dim = config.pop('pretrained_dim', None)
+        if pretrained_dim is not None:
+            # Create dummy embeddings with the right shape
+            # The actual values will be loaded from saved weights
+            n_items = config['n_items']
+            dummy_embeddings = np.zeros((n_items, pretrained_dim), dtype=np.float32)
+            config['pretrained_item_embeddings'] = dummy_embeddings
+        
+        return cls(**config)
 
 def create_model(n_users, n_items, pretrained_embeddings=None, config=None):
     """Factory function to create Hybrid NCF model
