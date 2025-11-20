@@ -201,7 +201,6 @@ podcast-recommendation-system/
 │   ├── models.py                                # HybridNCF model
 │   ├── training.py                              # Training functions
 │   └── data_splitting.py                       # Temporal split
-├── config.py                                    # Configuration
 └── README.md
 ```
 
